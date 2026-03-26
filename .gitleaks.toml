@@ -1,0 +1,14 @@
+title = "multi_tenant_saas_subscription_platform gitleaks config"
+
+[allowlist]
+description = "Allow placeholder values in templates and docs"
+paths = [
+  '''^\.env\.example$''',
+  '''^README\.md$'''
+]
+regexes = [
+  '''replace-with-[a-z0-9-]+''',
+  '''local-admin-key''',
+  '''change-me''',
+  '''example\.com'''
+]

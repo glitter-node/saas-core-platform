@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multi_tenant_saas_subscription_platform"
+version = "0.1.0"
+description = "Multi-tenant SaaS subscription platform backend starter built with FastAPI"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic==1.18.4",
+    "celery==5.5.3",
+    "fastapi==0.135.2",
+    "pydantic==2.12.5",
+    "pydantic-settings==2.13.1",
+    "PyMySQL==1.1.2",
+    "python-dotenv==1.2.2",
+    "redis==6.4.0",
+    "SQLAlchemy==2.0.48",
+    "stripe==13.0.1",
+    "uvicorn==0.42.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*", "worker*"]

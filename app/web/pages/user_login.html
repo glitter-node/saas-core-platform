@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>User Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-page="user-login">
+  <div class="site-shell">
+    <section class="auth-panel">
+      <div>
+        <p class="eyebrow">Tenant User Login</p>
+        <h1>Sign in on the tenant host you want to explore.</h1>
+        <p class="hero-copy">Enter your email. If the account does not exist yet, the first verified magic link will create it and attach it to this tenant as a member when capacity allows.</p>
+      </div>
+      <form id="user-login-form" class="auth-form">
+        <label class="field">
+          <span>Email</span>
+          <input name="email" type="email" required>
+        </label>
+        <button class="button button-primary" type="submit">Send sign-in link</button>
+        <p id="user-login-status" class="status-line"></p>
+      </form>
+      <div class="aux-links">
+        <a href="/">Back to landing</a>
+      </div>
+    </section>
+  </div>
+  <script src="/web-config.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

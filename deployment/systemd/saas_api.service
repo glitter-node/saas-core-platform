@@ -1,0 +1,16 @@
+[Unit]
+Description=multi_tenant_saas_subscription_platform API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/multi_tenant_saas_subscription_platform
+EnvironmentFile=/srv/multi_tenant_saas_subscription_platform/.env
+ExecStart=/srv/multi_tenant_saas_subscription_platform/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>User Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-page="user-dashboard">
+  <div class="site-shell dashboard-shell">
+    <header class="dashboard-header">
+      <div>
+        <p class="eyebrow">Tenant Dashboard</p>
+        <h1 id="tenant-dashboard-title">Member session</h1>
+      </div>
+      <div class="header-actions">
+        <button id="user-refresh-button" class="button button-secondary" type="button">Refresh data</button>
+        <button id="user-logout-button" class="button button-ghost" type="button">Logout</button>
+      </div>
+    </header>
+    <section class="dashboard-grid">
+      <article class="metric-card">
+        <p class="entry-label">Identity</p>
+        <pre id="user-me-output" class="json-box"></pre>
+      </article>
+      <article class="metric-card">
+        <p class="entry-label">Memberships</p>
+        <pre id="user-memberships-output" class="json-box"></pre>
+      </article>
+      <article class="metric-card">
+        <p class="entry-label">Subscription</p>
+        <pre id="user-subscription-output" class="json-box"></pre>
+      </article>
+      <article class="metric-card">
+        <p class="entry-label">Usage</p>
+        <pre id="user-usage-output" class="json-box"></pre>
+      </article>
+    </section>
+    <p id="user-dashboard-status" class="status-line"></p>
+  </div>
+  <script src="/web-config.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
