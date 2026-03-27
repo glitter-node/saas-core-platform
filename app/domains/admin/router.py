@@ -9,10 +9,33 @@ from app.domains.admin.service import get_admin_overview, get_admin_revenue, lis
 from app.domains.admin_audit.service import record_admin_audit_log
 from app.domains.admin_auth.models import AdminAccount
 
-router = AdminAPIRouter(prefix="/admin/metrics", tags=["admin"])
+root_router = AdminAPIRouter(prefix="/admin", tags=["admin"])
+metrics_router = AdminAPIRouter(prefix="/admin/metrics", tags=["admin"])
 
 
-@router.get("/overview", response_model=AdminOverviewRead)
+@root_router.get("")
+def get_admin_index(admin: AdminAccount = Depends(require_admin_access)) -> dict[str, object]:
+    return {
+        "namespace": "admin",
+        "role": admin.role.value,
+        "capabilities": {
+            "metrics": [
+                "/api/v1/admin/metrics/overview",
+                "/api/v1/admin/metrics/revenue",
+                "/api/v1/admin/metrics/recent-tenants",
+            ],
+            "auth": [
+                "/api/v1/admin/auth/login",
+                "/api/v1/admin/auth/magic-link/start",
+                "/api/v1/admin/auth/magic-link/consume",
+                "/api/v1/admin/auth/refresh",
+                "/api/v1/admin/auth/logout",
+            ],
+        },
+    }
+
+
+@metrics_router.get("/overview", response_model=AdminOverviewRead)
 def get_metrics_overview(
     request: Request,
     admin: AdminAccount = Depends(require_admin_access),
@@ -31,7 +54,7 @@ def get_metrics_overview(
     return AdminOverviewRead.model_validate(get_admin_overview(session))
 
 
-@router.get("/revenue", response_model=AdminRevenueRead)
+@metrics_router.get("/revenue", response_model=AdminRevenueRead)
 def get_metrics_revenue(
     request: Request,
     admin: AdminAccount = Depends(require_admin_access),
@@ -50,7 +73,7 @@ def get_metrics_revenue(
     return AdminRevenueRead.model_validate(get_admin_revenue(session))
 
 
-@router.get("/recent-tenants", response_model=list[AdminRecentTenantRead])
+@metrics_router.get("/recent-tenants", response_model=list[AdminRecentTenantRead])
 def get_recent_tenants(
     request: Request,
     admin: AdminAccount = Depends(require_admin_access),

@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 
 from app.api.dependencies import AdminAPIRouter, PublicAPIRouter, TenantAPIRouter
-from app.domains.admin.router import router as admin_router_metrics
+from app.domains.admin.router import metrics_router as admin_router_metrics
+from app.domains.admin.router import root_router as admin_router_root
 from app.domains.admin_auth.router import public_router as admin_auth_public_router
 from app.domains.auth.me_router import router as me_router
 from app.domains.auth.router import public_router as auth_public_router
@@ -28,6 +29,7 @@ tenant_router.include_router(organizations_router)
 tenant_router.include_router(memberships_router)
 tenant_router.include_router(subscriptions_router)
 tenant_router.include_router(usage_router)
+admin_router.include_router(admin_router_root)
 admin_router.include_router(admin_router_metrics)
 
 api_router.include_router(public_router)
