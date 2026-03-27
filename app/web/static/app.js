@@ -69,16 +69,16 @@ function renderTenantSelection(title, tenants, email) {
     button.innerHTML = `<strong>${tenant.name}</strong><span>${tenant.subdomain}.${config.appDomain}</span>`;
     button.addEventListener("click", async () => {
       if (!email) {
-        setText("landing-status", "Enter your email first, then choose a tenant.");
+        setText("landing-status", "Enter your email first, then choose a workspace.");
         return;
       }
       try {
-        setText("landing-status", `Sending link for ${tenant.subdomain}.${config.appDomain}...`);
+        setText("landing-status", `Sending a sign-in link for ${tenant.subdomain}.${config.appDomain}...`);
         const result = await postJson("/api/v1/auth/magic-link/start", {
           email,
           tenant_subdomain: tenant.subdomain,
         });
-        setText("landing-status", result.detail);
+        setText("landing-status", `A sign-in link has been sent for ${tenant.subdomain}.${config.appDomain}. Check your email to continue.`);
       } catch (error) {
         setText("landing-status", error.message);
       }
@@ -167,10 +167,14 @@ function initLanding() {
     const email = input.value.trim().toLowerCase();
     if (!email) {
       try {
-        setText("landing-status", "Showing tenant examples...");
+        setText("landing-status", "Loading example workspaces...");
         const data = await getJson("/api/v1/auth/tenant-examples");
-        renderTenantSelection("Tenant examples", data.tenants, "");
-        setText("landing-status", "Enter your email, then choose a tenant if you are new.");
+        renderTenantSelection(
+          "Demo workspaces available for access",
+          data.tenants,
+          "",
+        );
+        setText("landing-status", "Enter your email, then choose an example workspace if you need access.");
       } catch (error) {
         setText("landing-status", error.message);
       }
@@ -178,23 +182,27 @@ function initLanding() {
     }
     clearTenantSelection();
     try {
-      setText("landing-status", "Checking your tenant access...");
+      setText("landing-status", "Checking your workspace access...");
       const data = await postJson("/api/v1/auth/discover", { email });
-      setText("landing-status", data.detail);
       if (data.mode === "single_tenant") {
+        setText("landing-status", "A sign-in link has been sent to your email. Open the link to access your workspace.");
         return;
       }
       if (data.mode === "multiple_tenants") {
-        renderTenantSelection("Choose one of your tenants", data.tenants, email);
+        setText("landing-status", "Choose the workspace you want to access.");
+        renderTenantSelection("Choose one of your workspaces", data.tenants, email);
         return;
       }
       if (data.mode === "no_tenants") {
+        setText("landing-status", "No workspace access found for this email. You can request access to an existing workspace or contact your administrator.");
         renderTenantSelection(
-          "Select a tenant example to request your first access, then open the sign-in link from your mailbox.",
+          "Select an example workspace to request access. These are prepared environments for access. Your organization may provide a dedicated workspace.",
           data.example_tenants,
           email,
         );
+        return;
       }
+      setText("landing-status", data.detail);
     } catch (error) {
       setText("landing-status", error.message);
     }
@@ -207,7 +215,7 @@ function initUserLogin() {
     return;
   }
   if (currentHostIsRootDomain()) {
-    setText("user-login-status", "Open this page on a tenant subdomain such as team1.app.local.");
+    setText("user-login-status", "Open this page on your workspace subdomain, such as team1.app.local.");
   }
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -216,9 +224,9 @@ function initUserLogin() {
       email: String(formData.get("email") || ""),
     };
     try {
-      setText("user-login-status", "Sending sign-in link...");
+      setText("user-login-status", "Sending a sign-in link...");
       const data = await postJson("/api/v1/auth/magic-link/start", payload);
-      setText("user-login-status", data.detail);
+      setText("user-login-status", "A sign-in link has been sent to your email. Open the link to access this workspace.");
     } catch (error) {
       setText("user-login-status", error.message);
     }
@@ -285,9 +293,9 @@ function initAdminLogin() {
       email: String(formData.get("email") || ""),
     };
     try {
-      setText("admin-login-status", "Sending sign-in link...");
+      setText("admin-login-status", "Sending an admin sign-in link...");
       const data = await postJson("/api/v1/admin/auth/magic-link/start", payload);
-      setText("admin-login-status", data.detail);
+      setText("admin-login-status", "A sign-in link has been sent to your email. Open the link to access the admin console.");
     } catch (error) {
       setText("admin-login-status", error.message);
     }
@@ -299,11 +307,11 @@ async function completeMagicLink() {
   const token = params.get("token");
   const flow = params.get("flow");
   if (!token || !flow) {
-    setText("magic-link-status", "Missing magic link parameters.");
+    setText("magic-link-status", "Missing sign-in link parameters.");
     return;
   }
   try {
-    setText("magic-link-status", "Verifying your link...");
+    setText("magic-link-status", "Verifying your sign-in link...");
     if (flow === "user") {
       const data = await postJson("/api/v1/auth/magic-link/consume", { token });
       saveUserTokens(data);

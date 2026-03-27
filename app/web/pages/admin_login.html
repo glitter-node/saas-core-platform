@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Admin Login</title>
+  <title>Admin Console Sign-In | SaaS Core Platform</title>
+  <meta name="description" content="Sign in to the SaaS Core Platform admin console.">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#111827">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -14,15 +17,15 @@
     <section class="auth-panel">
       <div>
         <p class="eyebrow">Platform Admin Login</p>
-        <h1>Open the read-only admin dashboard.</h1>
-        <p class="hero-copy">Any verified email can be opened as a read-only admin viewer. The reserved superadmin account keeps elevated control for future write actions.</p>
+        <h1>Sign in to the admin console.</h1>
+        <p class="hero-copy">Platform administration is separate from workspace access. Use your admin email to receive a sign-in link for the admin console.</p>
       </div>
       <form id="admin-login-form" class="auth-form">
         <label class="field">
           <span>Email</span>
           <input name="email" type="email" required>
         </label>
-        <button class="button button-primary" type="submit">Send admin sign-in link</button>
+        <button class="button button-primary" type="submit">Email admin sign-in link</button>
         <p id="admin-login-status" class="status-line"></p>
       </form>
       <div class="aux-links">

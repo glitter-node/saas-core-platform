@@ -4,6 +4,7 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config.settings import get_settings
 from app.domains.admin_audit.service import record_admin_audit_log
 from app.domains.admin_auth.models import AdminAccount
 from app.domains.admin_auth.models import AdminRole
@@ -16,6 +17,7 @@ from app.domains.auth.magic_links import create_magic_link
 from app.domains.auth.passwords import make_unusable_password_hash
 from app.domains.auth.passwords import normalize_email
 from app.domains.auth.passwords import verify_password
+from app.domains.mail.auth_templates import build_magic_link_email
 from app.domains.mail.service import send_email
 from app.domains.users.service import create_user
 from app.domains.users.service import get_user_by_email
@@ -171,12 +173,24 @@ def send_admin_magic_link(session: Session, email: str, request: Request) -> Non
     admin_account = ensure_admin_account(session, user.id)
     if admin_account.is_active and admin_account.user.is_active:
         _, raw_token = create_magic_link(session, email=normalized_email, flow=MagicLinkFlow.admin)
+        settings = get_settings()
         link_url = f"{request.base_url}magic-link/complete?flow=admin&token={raw_token}"
-        role_label = "superadmin" if admin_account.role == AdminRole.superadmin else "admin"
+        title = "Sign in to the admin console"
+        destination_name = f"{getattr(request.url, 'hostname', None) or request.base_url.hostname} admin"
+        destination_host = getattr(request.url, "hostname", None) or request.base_url.hostname or "admin console"
+        subject, text_body, html_body = build_magic_link_email(
+            app_name=settings.app_name,
+            destination_name=destination_name,
+            destination_host=destination_host,
+            link_url=link_url,
+            expire_minutes=settings.magic_link_expire_minutes,
+            title=title,
+        )
         send_email(
             to_address=normalized_email,
-            subject="Admin sign-in link",
-            body=f"Use this {role_label} sign-in link:\n\n{link_url}",
+            subject=subject,
+            body=text_body,
+            html_body=html_body,
         )
     session.commit()
 

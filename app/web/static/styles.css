@@ -3,11 +3,11 @@
   --panel: rgba(255, 252, 246, 0.82);
   --panel-strong: #fff8ec;
   --text: #1b1b18;
-  --muted: #625e55;
-  --line: rgba(27, 27, 24, 0.12);
+  --muted: #4a4438;
+  --line: rgba(27, 27, 24, 0.18);
   --brand: #0f766e;
   --brand-strong: #115e59;
-  --accent: #d97706;
+  --accent: #8f5000;
   --shadow: 0 24px 80px rgba(45, 35, 17, 0.15);
 }
 
@@ -161,6 +161,10 @@ input {
   font: inherit;
   color: var(--text);
   background: rgba(255, 255, 255, 0.82);
+}
+
+input::placeholder {
+  color: #6a6154;
 }
 
 input:focus {

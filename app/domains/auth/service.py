@@ -13,6 +13,7 @@ from app.domains.auth.passwords import hash_password
 from app.domains.auth.passwords import make_unusable_password_hash
 from app.domains.auth.passwords import normalize_email
 from app.domains.auth.passwords import verify_password
+from app.domains.mail.auth_templates import build_magic_link_email
 from app.domains.auth.session_service import issue_login_tokens
 from app.domains.auth.session_service import revoke_refresh_token
 from app.domains.auth.session_service import rotate_refresh_token
@@ -135,14 +136,18 @@ def send_user_magic_link(session: Session, tenant: Tenant, email: str, request: 
     _, raw_token = create_magic_link(session, email=normalized_email, flow=MagicLinkFlow.user, tenant_id=tenant.id)
     settings = get_settings()
     link_url = build_magic_link_url(request, MagicLinkFlow.user, raw_token, tenant)
+    subject, text_body, html_body = build_magic_link_email(
+        app_name=settings.app_name,
+        destination_name=tenant.name,
+        destination_host=f"{tenant.subdomain}.{settings.app_domain}",
+        link_url=link_url,
+        expire_minutes=settings.magic_link_expire_minutes,
+    )
     send_email(
         to_address=normalized_email,
-        subject=f"{settings.app_name} sign-in link",
-        body=(
-            f"Use this sign-in link for tenant {tenant.subdomain}.{settings.app_domain}:\n\n"
-            f"{link_url}\n\n"
-            "If the email is new, the account will be created automatically on verification."
-        ),
+        subject=subject,
+        body=text_body,
+        html_body=html_body,
     )
     session.commit()
 

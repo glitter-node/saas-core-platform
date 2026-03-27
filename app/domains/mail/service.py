@@ -9,13 +9,22 @@ from app.config.settings import get_settings
 VALID_MAIL_ENCRYPTION = {"none", "tls", "ssl"}
 
 
-def build_email_message(*, to_address: str, subject: str, body: str, settings: Settings | None = None) -> EmailMessage:
+def build_email_message(
+    *,
+    to_address: str,
+    subject: str,
+    body: str,
+    html_body: str | None = None,
+    settings: Settings | None = None,
+) -> EmailMessage:
     runtime_settings = settings or get_settings()
     message = EmailMessage()
     message["From"] = f"{runtime_settings.mail_from_name} <{runtime_settings.mail_from_address}>"
     message["To"] = to_address
     message["Subject"] = subject
     message.set_content(body)
+    if html_body is not None:
+        message.add_alternative(html_body, subtype="html")
     return message
 
 
@@ -69,12 +78,20 @@ def verify_smtp_connection(settings: Settings | None = None) -> None:
     client.quit()
 
 
-def send_email(*, to_address: str, subject: str, body: str, settings: Settings | None = None) -> None:
+def send_email(
+    *,
+    to_address: str,
+    subject: str,
+    body: str,
+    html_body: str | None = None,
+    settings: Settings | None = None,
+) -> None:
     runtime_settings = settings or get_settings()
     message = build_email_message(
         to_address=to_address,
         subject=subject,
         body=body,
+        html_body=html_body,
         settings=runtime_settings,
     )
     client = open_smtp_connection(runtime_settings)

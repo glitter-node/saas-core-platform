@@ -3,46 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Platform Entry</title>
+  <title>Workspace Access | SaaS Core Platform</title>
+  <meta name="description" content="Access your organization workspace through a secure email sign-in flow. SaaS Core Platform provides tenant-aware workspace access, admin controls, billing, and operational tooling.">
+  <meta name="robots" content="index,follow">
+  <meta name="theme-color" content="#111827">
+  <link rel="canonical" href="https://saasapi.glitter.kr/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Workspace Access | SaaS Core Platform">
+  <meta property="og:description" content="Access your organization workspace through a secure email sign-in flow.">
+  <meta property="og:url" content="https://saasapi.glitter.kr/">
+  <meta property="og:site_name" content="SaaS Core Platform">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Workspace Access | SaaS Core Platform">
+  <meta name="twitter:description" content="Access your organization workspace through a secure email sign-in flow.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body data-page="landing">
-  <div class="site-shell">
-    <section class="hero-panel">
-      <p class="eyebrow">Operational SaaS Backend Starter</p>
-      <h1>Explore the platform through separate user and admin entry points.</h1>
-      <p class="hero-copy">
-        This workspace includes tenant isolation, JWT authentication, billing synchronization, usage enforcement, async jobs, and admin metrics.
-      </p>
-      <div class="hero-grid">
-        <article class="entry-card">
-          <p class="entry-label">Tenant User Portal</p>
-          <h2>Start with your email</h2>
-          <p>The platform checks tenant memberships by email. If only one tenant matches, a sign-in link is sent immediately. If several match, you can choose the tenant before the link is sent.</p>
-          <label class="field">
-            <span>Email</span>
-            <input id="user-entry-email" type="email" placeholder="you@example.com" autocomplete="email">
-          </label>
-          <button id="tenant-entry-button" class="button button-primary" type="button">Open user login</button>
-          <p id="landing-status" class="status-line"></p>
-          <div id="tenant-selection-panel" class="selection-panel" hidden>
-            <p id="tenant-selection-title" class="hint"></p>
-            <div id="tenant-selection-list" class="tenant-list"></div>
-          </div>
-        </article>
-        <article class="entry-card">
-          <p class="entry-label">Platform Admin Console</p>
-          <h2>Use the root admin auth path</h2>
-          <p>Admin routes are global and intentionally separate from tenant membership. Sign in with an attached admin account and inspect platform metrics.</p>
-          <a class="button button-secondary" href="/admin/login">Open admin login</a>
-          <p class="hint">Admin metrics live under /api/v1/admin</p>
-        </article>
-      </div>
-    </section>
-  </div>
+  <main>
+    <div class="site-shell">
+      <section class="hero-panel">
+        <p class="eyebrow">Operational SaaS Backend Starter</p>
+        <h1>Access your workspace</h1>
+        <p class="hero-copy">
+          Enter your email to find and access your organization through the correct workspace entry point.
+        </p>
+        <div class="hero-grid">
+          <article class="entry-card">
+            <p class="entry-label">Tenant User Portal</p>
+            <h2>Enter your email to access your workspace</h2>
+            <p>The platform checks workspace access by email. If one organization matches, a sign-in link is sent right away. If several match, you can choose the correct workspace before the link is sent.</p>
+            <label class="field">
+              <span>Email</span>
+              <input id="user-entry-email" type="email" placeholder="you@example.com" autocomplete="email">
+            </label>
+            <button id="tenant-entry-button" class="button button-primary" type="button">Access user workspace</button>
+            <p id="landing-status" class="status-line"></p>
+            <div id="tenant-selection-panel" class="selection-panel" hidden>
+              <p id="tenant-selection-title" class="hint"></p>
+              <div id="tenant-selection-list" class="tenant-list"></div>
+            </div>
+          </article>
+          <article class="entry-card">
+            <p class="entry-label">Platform Admin Console</p>
+            <h2>Access the platform admin console</h2>
+            <p>Admin routes are global and separate from workspace membership. Sign in with an authorized admin account to review platform metrics.</p>
+            <a class="button button-secondary" href="/admin/login">Access admin console</a>
+            <p class="hint">Admin metrics live under /api/v1/admin</p>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
   <script src="/web-config.js"></script>
   <script src="/static/app.js"></script>
 </body>
