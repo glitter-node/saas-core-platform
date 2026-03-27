@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import AliasChoices
 from pydantic import Field
@@ -13,6 +14,8 @@ class Settings(BaseSettings):
     app_env: str = Field(alias="APP_ENV")
     app_port: int = Field(alias="APP_PORT")
     app_domain: str = Field(alias="APP_DOMAIN")
+    static_root_path: Path = Field(alias="STATIC_ROOT_PATH")
+    assets_root_path: Path = Field(alias="ASSETS_ROOT_PATH")
     database_url: str = Field(alias="DATABASE_URL")
     redis_url: str = Field(alias="REDIS_URL")
     secret_key: str = Field(alias="SECRET_KEY")

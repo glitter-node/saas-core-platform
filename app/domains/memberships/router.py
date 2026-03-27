@@ -1,4 +1,5 @@
 from fastapi import Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import TenantAPIRouter, require_tenant
@@ -29,16 +30,22 @@ def invite_membership(
     tenant: Tenant = Depends(require_tenant),
     session: Session = Depends(get_db_session),
 ) -> MembershipRead:
-    user = get_user_by_email(session, payload.email)
-    if user is None:
-        user = create_user(session, payload.email, payload.full_name)
+    if session.in_transaction():
+        session.rollback()
 
-    membership = get_membership_by_tenant_and_user(session, tenant.id, user.id)
-    if membership is not None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Membership already exists")
+    with session.begin():
+        session.execute(select(Tenant).where(Tenant.id == tenant.id).with_for_update()).scalar_one()
 
-    assert_within_limit(session, tenant.id, MEMBER_SEATS, get_membership_count(session, tenant.id) + 1)
-    membership = create_membership(session, tenant.id, user, payload.role)
-    session.commit()
+        user = get_user_by_email(session, payload.email)
+        if user is None:
+            user = create_user(session, payload.email, payload.full_name)
+
+        membership = get_membership_by_tenant_and_user(session, tenant.id, user.id)
+        if membership is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Membership already exists")
+
+        assert_within_limit(session, tenant.id, MEMBER_SEATS, get_membership_count(session, tenant.id) + 1)
+        membership = create_membership(session, tenant.id, user, payload.role)
+
     session.refresh(membership)
     return MembershipRead.model_validate(membership)

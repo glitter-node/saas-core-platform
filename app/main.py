@@ -60,7 +60,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Admin-Key", "X-User-Email", "Stripe-Signature"],
 )
 app.add_middleware(TenantContextMiddleware, session_factory=SessionLocal)
-app.mount("/static", StaticFiles(directory="app/web/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(settings.static_root_path)), name="static")
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(web_router)
 

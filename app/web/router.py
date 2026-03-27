@@ -11,9 +11,10 @@ router.include_router(admin_workspaces_web_router)
 
 BASE_DIR = Path(__file__).resolve().parent
 PAGES_DIR = BASE_DIR / "pages"
-FAVICON_PATH = Path("/volume1/hwi/gimg/favicon/favicon.ico")
-ROBOTS_PATH = Path("/volume1/hwi/saasapi.glitter.kr_robots.txt")
-SITEMAP_PATH = Path("/volume1/hwi/saasapi.glitter.kr_sitemap.xml")
+settings = get_settings()
+FAVICON_PATH = settings.assets_root_path / "gimg" / "favicon" / "favicon.ico"
+ROBOTS_PATH = settings.assets_root_path / "saasapi.glitter.kr_robots.txt"
+SITEMAP_PATH = settings.assets_root_path / "saasapi.glitter.kr_sitemap.xml"
 
 
 @router.get("/", include_in_schema=False)
@@ -90,7 +91,6 @@ def admin_dashboard_page() -> FileResponse:
 
 @router.get("/web-config.js", include_in_schema=False)
 def web_config() -> Response:
-    settings = get_settings()
     body = (
         "window.SAAS_CONFIG = "
         + "{"
