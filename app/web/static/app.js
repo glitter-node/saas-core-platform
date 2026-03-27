@@ -142,11 +142,13 @@ function userRefreshToken() {
 function saveAdminTokens(payload) {
   localStorage.setItem("saas_admin_access_token", payload.access_token);
   localStorage.setItem("saas_admin_refresh_token", payload.refresh_token);
+  document.cookie = `saas_admin_access_token=${encodeURIComponent(payload.access_token)}; Path=/; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
 }
 
 function clearAdminTokens() {
   localStorage.removeItem("saas_admin_access_token");
   localStorage.removeItem("saas_admin_refresh_token");
+  document.cookie = "saas_admin_access_token=; Path=/; Max-Age=0; SameSite=Lax";
 }
 
 function adminAccessToken() {
@@ -346,7 +348,14 @@ async function loadAdminDashboard() {
     writeJson("admin-overview-output", overview);
     writeJson("admin-revenue-output", revenue);
     writeJson("admin-tenants-output", tenants);
-    setText("admin-dashboard-status", `Admin host: ${window.location.hostname}`);
+    const params = new URLSearchParams(window.location.search);
+    const workspaceCreated = params.get("workspace_created");
+    const workspaceName = params.get("workspace_name");
+    if (workspaceCreated && workspaceName) {
+      setText("admin-dashboard-status", `Workspace ${workspaceName} created at ${workspaceCreated}.${config.appDomain}`);
+    } else {
+      setText("admin-dashboard-status", `Admin host: ${window.location.hostname}`);
+    }
   } catch (error) {
     setText("admin-dashboard-status", error.message);
   }

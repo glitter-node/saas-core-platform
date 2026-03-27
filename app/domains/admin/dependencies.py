@@ -1,4 +1,4 @@
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.config.settings import get_settings
@@ -29,11 +29,15 @@ def require_development_admin_access(x_admin_key: str | None = Header(default=No
 
 def get_current_admin_principal(
     authorization: str | None = Header(default=None, alias="Authorization"),
+    admin_access_cookie: str | None = Cookie(default=None, alias="saas_admin_access_token"),
     session: Session = Depends(get_db_session),
 ) -> AdminAccount:
-    if not authorization:
+    token_source = authorization
+    if not token_source and admin_access_cookie:
+        token_source = f"Bearer {admin_access_cookie}"
+    if not token_source:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    scheme, _, token = authorization.partition(" ")
+    scheme, _, token = token_source.partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Authorization header")
     payload = decode_admin_token(token, expected_token_type=AdminTokenType.access)

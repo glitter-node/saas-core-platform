@@ -4,8 +4,10 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import FileResponse
 
 from app.config.settings import get_settings
+from app.web.admin_workspaces import router as admin_workspaces_web_router
 
 router = APIRouter(tags=["web"])
+router.include_router(admin_workspaces_web_router)
 
 BASE_DIR = Path(__file__).resolve().parent
 PAGES_DIR = BASE_DIR / "pages"

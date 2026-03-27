@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Workspace | SaaS Core Platform</title>
+  <meta name="description" content="Create a new workspace from the admin console.">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#111827">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-page="admin-workspace-new">
+  <div class="site-shell">
+    <section class="auth-panel">
+      <div>
+        <p class="eyebrow">Platform Admin</p>
+        <h1>Create Workspace</h1>
+        <p class="hero-copy">Create a new workspace explicitly from the admin area. You will be added to the workspace as an admin member.</p>
+      </div>
+      <form class="auth-form" action="/admin/workspaces" method="post">
+        <label class="field">
+          <span>Workspace name</span>
+          <input name="name" type="text" required maxlength="120" value="__WORKSPACE_NAME__" autocomplete="off">
+        </label>
+        <button class="button button-primary" type="submit">Create Workspace</button>
+        <p id="workspace-create-status" class="status-line">__WORKSPACE_STATUS__</p>
+      </form>
+      <div class="aux-links">
+        <a href="/admin/dashboard">Back to admin dashboard</a>
+      </div>
+    </section>
+  </div>
+  <script src="/web-config.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
