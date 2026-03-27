@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 .venv/
 __pycache__/
 *.pyc
@@ -20,3 +21,6 @@ logs/
 .idea/
 .vscode/
 .DS_Store
+.local/
+deployment/rendered/
+celerybeat-schedule

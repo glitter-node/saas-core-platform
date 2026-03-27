@@ -1,46 +1,229 @@
 # multi_tenant_saas_subscription_platform
 
-Production-ready FastAPI starter for a multi-tenant SaaS backend with subdomain tenant resolution, SQLAlchemy 2.x, Alembic, and deployment scaffolding for Nginx and systemd.
+FastAPI backend for a multi-tenant SaaS platform with tenant resolution from the `Host` header, SQLAlchemy 2.x, Alembic migrations, Celery background jobs, and deployment templates for Nginx and systemd.
 
-The root path now serves a lightweight landing page with separate entry points for tenant user login and platform admin login. Tenant users can start from a single email field on the landing page; the backend discovers tenant memberships, sends a magic link immediately for a single tenant, or asks the user to choose a tenant when several memberships exist. Platform admins use the root-host admin login and admin dashboard.
+## Fresh Machine Reproduction
+
+Canonical target: Ubuntu with outbound HTTPS access to PyPI and `sudo` available.
+
+1. Install OS packages and start local MariaDB and Redis:
+
+```bash
+./scripts/bootstrap_ubuntu.sh
+```
+
+2. Create the Python virtual environment and install Python dependencies:
+
+```bash
+./scripts/bootstrap_python.sh
+```
+
+3. Create the application environment file:
+
+```bash
+cp .env.example .env
+```
+
+4. Create the local database and application database user from `DATABASE_URL` in `.env`:
+
+```bash
+./scripts/init_local_db.sh
+```
+
+5. Run migrations, create deterministic local validation data, and render deployment artifacts:
+
+```bash
+.venv/bin/alembic upgrade head
+.venv/bin/python scripts/bootstrap_local_data.py
+.venv/bin/python scripts/render_deployment.py
+```
+
+6. Start the API, worker, and scheduler:
+
+```bash
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.venv/bin/celery -A worker.main:celery_app worker --loglevel=INFO --concurrency=1 -P solo
+.venv/bin/celery -A worker.scheduler:celery_app beat --loglevel=INFO --schedule .local/celerybeat-schedule
+```
+
+7. Run the deterministic end-to-end verification:
+
+```bash
+APP_PORT=8000 ./scripts/verify_local.sh
+```
+
+8. Validate deployment artifacts derived from the clone path:
+
+```bash
+nginx -t -c deployment/rendered/nginx/nginx.conf
+systemd-analyze verify deployment/rendered/systemd/saas_api.service deployment/rendered/systemd/saas_worker.service deployment/rendered/systemd/saas_scheduler.service
+```
+
+## Production Deployment
+
+Canonical production target:
+
+- Ubuntu 24.04 LTS
+- install path: `/srv/multi_tenant_saas_subscription_platform`
+- process model: `uvicorn` API, Celery worker, Celery beat scheduler
+- service manager: systemd
+- reverse proxy: nginx on port `80`
+
+Provision the server:
+
+```bash
+./scripts/bootstrap_ubuntu.sh
+```
+
+Deploy the repository into the canonical production path and install Python dependencies:
+
+```bash
+./scripts/deploy_production.sh
+```
+
+Create the production environment file:
+
+```bash
+sudo cp /srv/multi_tenant_saas_subscription_platform/.env.production.example /srv/multi_tenant_saas_subscription_platform/.env
+sudoedit /srv/multi_tenant_saas_subscription_platform/.env
+```
+
+Create the database from `DATABASE_URL` in `/srv/multi_tenant_saas_subscription_platform/.env`:
+
+```bash
+sudo /srv/multi_tenant_saas_subscription_platform/scripts/init_production_db.sh
+```
+
+Run migrations and prepare deterministic validation data:
+
+```bash
+sudo /srv/multi_tenant_saas_subscription_platform/.venv/bin/alembic -c /srv/multi_tenant_saas_subscription_platform/alembic.ini upgrade head
+sudo /srv/multi_tenant_saas_subscription_platform/scripts/bootstrap_validation_data.sh
+```
+
+Enable and start services:
+
+```bash
+sudo systemctl enable --now saas_api saas_worker saas_scheduler
+sudo nginx -t -c /srv/multi_tenant_saas_subscription_platform/deployment/nginx/nginx.conf
+sudo systemctl restart nginx
+```
+
+Validate the deployed system:
+
+```bash
+sudo systemd-analyze verify /srv/multi_tenant_saas_subscription_platform/deployment/systemd/saas_api.service /srv/multi_tenant_saas_subscription_platform/deployment/systemd/saas_worker.service /srv/multi_tenant_saas_subscription_platform/deployment/systemd/saas_scheduler.service
+sudo /srv/multi_tenant_saas_subscription_platform/scripts/validate_production.sh
+```
 
 ## Architecture
 
-The codebase is organized around three layers:
+The repository has three runtime areas:
 
-- `app/` contains the HTTP application, domain modules, middleware, settings, and database integration.
-- `worker/` is reserved for asynchronous and background processing entrypoints.
-- `deployment/` contains infrastructure-facing templates for Nginx and systemd.
+- `app/`: FastAPI application, API routers, middleware, settings, database integration, domain modules, and web pages
+- `worker/`: Celery application, worker tasks, and scheduler entrypoints
+- `deployment/`: Nginx and systemd deployment templates
 
-Inside `app/`, domains are grouped by business capability:
+The FastAPI application is initialized in `app.main:app`. It:
 
-- `admin/`
-- `tenants/`
-- `auth/`
-- `organizations/`
-- `memberships/`
-- `users/`
-- `subscriptions/`
-- `notifications/`
-- `usage/`
+- loads settings from `app.config.settings`
+- creates the FastAPI app
+- enables `/docs`, `/redoc`, and `/openapi.json` only when `settings.docs_enabled` is true
+- applies `TrustedHostMiddleware`, `CORSMiddleware`, and `TenantContextMiddleware`
+- mounts static files from `app/web/static` at `/static`
+- includes the API router under `/api/v1`
+- includes the web router for landing/login/dashboard pages
+- exposes `GET /healthz`
 
-Tenant isolation starts at request entry. Middleware resolves the tenant from the `Host` header and loads the tenant into request state. API scope is separated into public, tenant, and admin routers. Tenant-scoped routers reject requests when no tenant context is available.
+## API Structure
+
+API routes are assembled in `app/api/router.py` and split into three scopes:
+
+- Public routes
+  - `/api/v1/auth/*`
+  - `/api/v1/admin/auth/*`
+  - `/api/v1/webhooks/stripe`
+- Tenant routes
+  - `/api/v1/tenant`
+  - `/api/v1/me`
+  - `/api/v1/auth/session`
+  - `/api/v1/organization`
+  - `/api/v1/memberships`
+  - `/api/v1/billing/*`
+  - `/api/v1/usage`
+- Admin routes
+  - `/api/v1/admin`
+  - `/api/v1/admin/metrics/*`
+
+Tenant-scoped routers require tenant context. If tenant context is missing, the request fails with `404 Tenant context not found`.
+
+## Tenant Resolution
+
+Tenant resolution is implemented by `TenantContextMiddleware` in `app/middleware/tenant_context.py`.
+
+- The middleware reads the incoming `Host` header
+- It compares the host against `APP_DOMAIN`
+- If the host is exactly `APP_DOMAIN`, no tenant is resolved
+- If the host ends with `.<APP_DOMAIN>`, the prefix before that suffix is treated as the tenant subdomain
+- The middleware loads the active tenant by subdomain and stores it in `request.state.tenant`
+- If the tenant is not found or inactive, tenant state remains unset
+
+Example with `APP_DOMAIN=app.local`:
+
+- `app.local` -> no tenant context
+- `team1.app.local` -> tenant subdomain `team1`
+
+## Web Routes
+
+The web router in `app/web/router.py` serves these routes:
+
+- `GET /` -> `app/web/pages/landing.html`
+- `GET /login` -> `app/web/pages/user_login.html`
+- `GET /dashboard` -> `app/web/pages/user_dashboard.html`
+- `GET /magic-link/complete` -> `app/web/pages/magic_link_complete.html`
+- `GET /admin/login` -> `app/web/pages/admin_login.html`
+- `GET /admin/dashboard` -> `app/web/pages/admin_dashboard.html`
+- `GET /admin/workspaces/new`
+- `POST /admin/workspaces`
+- `POST /admin/workspaces/{workspace_id}/delete`
+- `GET /web-config.js`
+
+The router also exposes:
+
+- `GET /favicon.ico`
+- `HEAD /favicon.ico`
+- `GET /robots.txt`
+- `HEAD /robots.txt`
+- `GET /sitemap.xml`
+- `HEAD /sitemap.xml`
+
+These three assets are served from absolute filesystem paths outside the repository:
+
+- `/volume1/hwi/gimg/favicon/favicon.ico`
+- `/volume1/hwi/saasapi.glitter.kr_robots.txt`
+- `/volume1/hwi/saasapi.glitter.kr_sitemap.xml`
+
+If those files do not exist, the route returns `404`.
 
 ## Data Model
 
-- One tenant has one organization
-- One tenant has many memberships
-- One user can belong to many tenants through memberships
-- Membership roles are `owner`, `admin`, and `member`
+SQLAlchemy models are registered in `app/db/models.py`. The registered domains are:
 
-Core relationships:
+- tenants
+- organizations
+- users
+- memberships
+- subscriptions and plans
+- usage events and usage counters
+- notifications
+- auth sessions
+- auth magic links
+- admin accounts
+- admin auth sessions
+- admin audit logs
+- billing event ledger
 
-- `Tenant` has one `Organization`
-- `Tenant` has many `Membership`
-- `User` has many `Membership`
-- `Tenant` and `User` are connected through `Membership`
-- `Tenant` has one current `Subscription`
-- `Subscription` belongs to one `Plan`
+Alembic migrations in `alembic/versions/` create and evolve these tables.
 
 ## Setup
 
@@ -51,19 +234,20 @@ Core relationships:
 pip install -r requirements.txt
 ```
 
-3. Copy the environment file and adjust values:
+3. Copy the environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-4. Run migrations:
+4. Configure the required values in `.env`.
+5. Run migrations:
 
 ```bash
 alembic upgrade head
 ```
 
-5. Start the API:
+6. Start the API:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT:-8000}"
@@ -71,195 +255,255 @@ uvicorn app.main:app --host 0.0.0.0 --port "${APP_PORT:-8000}"
 
 ## Environment
 
-Configuration is loaded from environment variables through `pydantic-settings`. The project expects `.env` to be sourced by the shell or loaded automatically by the settings layer.
+Configuration is loaded by `app.config.settings.Settings` from `.env`.
 
-## Mail
+Core variables in `.env.example`:
 
-SMTP is configured through the existing mail environment variables and is now backed by a real SMTP service layer.
-
-- `MAIL_MAILER` must be `smtp`
-- `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION`, `MAIL_FROM_ADDRESS`, and `MAIL_FROM_NAME` define the outbound mail transport
-- Supported encryption values are `none`, `tls`, and `ssl`
-
-Verify SMTP connectivity with the current environment:
-
-```bash
-python -m app.domains.mail.verify
-```
-
-Send a test message:
-
-```bash
-python -m app.domains.mail.verify --send-test --to you@example.com
-```
-
-## Security
-
-- Keep `.env` and any environment-specific variants out of version control
-- Treat `.env.example` as placeholders only and never store real credentials in tracked files
-- Rotate application, Stripe, mail, Redis, database, and admin secrets when environments are shared or exposed
-- Use non-local `APP_ENV` values only with fully configured runtime secrets
-
-Local secret scan before push:
-
-```bash
-gitleaks detect --config .gitleaks.toml --source .
-```
-
-## Security Configuration
-
-Recommended production configuration:
-
-- Set `APP_ENV` to a non-local value such as `production`
-- Provide `DATABASE_URL`, `SECRET_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`
-- Keep `APP_DEBUG=false`
-- Leave `ENABLE_DOCS` unset or set it to `false` unless docs exposure is intentionally required
-- Leave `DEV_AUTH_ENABLED=false`
-- Leave `DEV_ADMIN_AUTH_ENABLED=false`
-- Set `ALLOWED_HOSTS` to the exact application hosts that should be served
-- Set `CORS_ALLOWED_ORIGINS` to explicit trusted origins only
-
-Runtime safety defaults:
-
-- OpenAPI and Swagger are enabled by default only in local environments
-- Development header auth is disabled by default, including in local environments, unless `DEV_AUTH_ENABLED=true` or `DEV_ADMIN_AUTH_ENABLED=true`
-- Wildcard CORS origins are rejected outside local environments
-- Trusted hosts default to the configured application domain in non-local environments
-- Invalid Stripe webhook signatures return safe generic errors
-
-## Tenant Resolution
-
-- `APP_DOMAIN` defines the shared root domain, for example `core.glitter.kr`
-- Requests to `tenant-a.core.glitter.kr` resolve `tenant-a` as the tenant subdomain
-- Requests to the bare application domain do not create tenant context
-- Tenant-scoped routes fail with `404` if the tenant is not resolved or is inactive
-
-## Authentication
-
-Password-based authentication and JWT token issuance live in the `auth` domain.
-
-- `POST /api/v1/auth/register` creates a user with a normalized email and hashed password
-- `POST /api/v1/auth/login` validates credentials, updates `last_login_at`, and returns JWT access and refresh tokens
-- `POST /api/v1/auth/magic-link/start` sends a tenant-scoped sign-in link to the submitted email
-- `POST /api/v1/auth/magic-link/consume` verifies the sign-in link, auto-creates the user if needed, and issues tokens
-- `POST /api/v1/auth/refresh` accepts a refresh token and returns a rotated refresh token and a new access token
-- `POST /api/v1/auth/logout` revokes the presented refresh token session
-- Send bearer tokens with `Authorization: Bearer <access_token>`
-
-Access Tokens:
-
-- Short-lived JWTs signed with `SECRET_KEY`
-- Include `sub`, `email`, `token_type`, and `exp`
-- Intended for authenticated API access
-
-Refresh Tokens:
-
-- Longer-lived JWTs signed with the same application secret
-- Must be sent to `/api/v1/auth/refresh`
-- Stored server-side only as token hashes in `auth_sessions`
-- Rotated on every refresh and revoked on logout
-
-Production deployments should treat Bearer tokens as the supported user authentication path.
-
-Magic Link Entry:
-
-- Tenant user entry is email-first on the tenant login page
-- If the email is new, the first verified magic link creates the user automatically
-- The same verified flow also creates a tenant membership as `member` when one does not already exist and the tenant seat limit allows it
-- Platform admin entry also supports magic links, but only for existing active admin accounts
-
-## Bearer Authentication
-
-Tenant-scoped authenticated requests now use JWT bearer tokens as the primary current-user mechanism.
-
-- Send `Authorization: Bearer <access_token>` with tenant-scoped requests
-- Send the tenant `Host` header so middleware can resolve the current tenant context
-- Current membership is resolved from the authenticated user and the tenant loaded from `Host`
-- Non-members receive `403 Tenant membership required`
-
-Example:
-
-```bash
-curl -i http://127.0.0.1:8000/api/v1/me \
-  -H "Host: team1.app.local" \
-  -H "Authorization: Bearer <access_token>"
-```
-
-## Development Authentication
-
-Development authentication exists only to make local verification possible before a real identity layer is integrated.
-
-- Tenant member development auth uses `X-User-Email`
-- Admin development auth uses `X-Admin-Key`
-- Tenant development auth is used only as a local compatibility fallback when `DEV_AUTH_ENABLED=true`
-- Admin development auth is used only as a local compatibility fallback when `DEV_ADMIN_AUTH_ENABLED=true`
-- Both mechanisms are accepted only in local-style environments such as `local`, `development`, `dev`, or `test`
-- Production-like environments reject these headers with safe `401` responses
-
-This is not production authentication and must not be used as a deployment auth strategy.
-
-In a real deployment, replace these development headers with a proper authentication system such as:
-
-- session or token-based user authentication
-- tenant-aware identity claims
-- separate privileged admin authentication with audited access controls
-
-## Billing
-
-Billing lives in the `subscriptions` domain and uses Stripe as the system of record for paid subscription lifecycle changes.
-
-- `free`, `pro`, and `enterprise` plans are stored locally
-- Checkout session creation requires owner access
-- Subscription reads require tenant membership
-- Stripe webhooks synchronize local subscription state
-
-Environment variables used by billing:
-
+- `APP_NAME`
+- `APP_ENV`
+- `APP_PORT`
+- `APP_DOMAIN`
+- `APP_DEBUG`
+- `ENABLE_DOCS`
+- `DEV_AUTH_ENABLED`
+- `DEV_ADMIN_AUTH_ENABLED`
+- `ALLOWED_HOSTS`
+- `CORS_ALLOWED_ORIGINS`
+- `DATABASE_URL`
+- `REDIS_URL`
+- `SECRET_KEY`
+- `ACCESS_TOKEN_EXPIRE_MINUTES`
+- `REFRESH_TOKEN_EXPIRE_DAYS`
+- `MAGIC_LINK_EXPIRE_MINUTES`
+- `ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES`
+- `ADMIN_REFRESH_TOKEN_EXPIRE_DAYS`
+- `JWT_ALGORITHM`
+- `ADMIN_JWT_SCOPE`
+- `MAIL_MAILER`
+- `MAIL_HOST`
+- `MAIL_PORT`
+- `MAIL_USERNAME`
+- `MAIL_PASSWORD`
+- `MAIL_ENCRYPTION`
+- `MAIL_FROM_ADDRESS`
+- `MAIL_FROM_NAME`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `STRIPE_PRICE_ID_PRO`
 - `STRIPE_PRICE_ID_ENTERPRISE`
+- `SUBSCRIPTION_EXPIRY_WARNING_DAYS`
+- `USAGE_WARNING_THRESHOLD_PERCENT`
+- `SCHEDULER_SUBSCRIPTION_EXPIRY_SCAN_MINUTES`
+- `ADMIN_API_KEY`
 
-## Usage Tracking and Limits
+Runtime validation enforced by `app/config/settings.py`:
 
-Usage tracking lives in the `usage` domain and stores both append-only events and current counters per tenant.
+- non-local environments require `DATABASE_URL`, `SECRET_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`
+- `APP_DEBUG` must be false outside local environments
+- `CORS_ALLOWED_ORIGINS` cannot contain `*` outside local environments
+- `JWT_ALGORITHM` must be `HS256`
+- `MAIL_MAILER` must be `smtp`
+- `MAIL_ENCRYPTION` must be one of `none`, `tls`, or `ssl`
+- development auth flags are rejected outside local-style environments
+- `ADMIN_API_KEY` is required when `DEV_ADMIN_AUTH_ENABLED=true`
 
-- `api_requests` is incremented on selected tenant member routes
-- `member_seats` is synchronized from the current tenant membership count
-- Plan limits come from `plans.limits_json`
-- Requests exceeding the active plan limit return `403`
+## Authentication
 
-Example verification flow:
+### User Authentication
+
+User auth routes are implemented in `app/domains/auth/router.py`.
+
+- `POST /api/v1/auth/register`
+  - creates an active user with normalized email and hashed password
+- `POST /api/v1/auth/login`
+  - validates email and password
+  - updates `last_login_at`
+  - returns access and refresh tokens
+- `POST /api/v1/auth/discover`
+  - checks tenant memberships for the submitted email
+  - if exactly one active tenant exists, sends a magic link immediately
+  - if multiple active tenants exist, returns those tenants so the client can choose
+  - if no active tenant exists, returns example tenants
+- `GET /api/v1/auth/tenant-examples`
+  - returns active tenant examples
+- `POST /api/v1/auth/magic-link/start`
+  - resolves tenant context from the request tenant or `tenant_subdomain`
+  - sends a tenant-scoped magic link email
+- `POST /api/v1/auth/magic-link/consume`
+  - validates the magic link
+  - creates the user if missing
+  - creates a tenant membership with role `member` if missing and within usage limits
+  - updates `last_login_at`
+  - returns access and refresh tokens
+- `POST /api/v1/auth/refresh`
+  - rotates the refresh token
+  - returns a new refresh token and a new access token
+- `POST /api/v1/auth/logout`
+  - revokes the presented refresh token
+- `GET /api/v1/auth/session`
+  - requires tenant context and authenticated user
+  - returns `tenant_slug`, `tenant_id`, and `user_id`
+
+Bearer auth behavior is implemented in `app/domains/auth/dependencies.py`:
+
+- authenticated requests use `Authorization: Bearer <access_token>`
+- the token subject must match an active user
+- if the token is absent and `X-User-Email` is present, local development header auth is used only when `DEV_AUTH_ENABLED=true` and the environment is local-style
+
+Tenant membership checks:
+
+- tenant member access requires an authenticated user who belongs to the resolved tenant
+- non-members receive `403 Tenant membership required`
+- owner/admin restrictions are enforced for selected routes
+
+### Admin Authentication
+
+Admin auth routes are implemented in `app/domains/admin_auth/router.py`.
+
+- `POST /api/v1/admin/auth/login`
+  - validates email and password
+  - requires an active admin account for that user
+  - if `mfa_enabled` is true and no `otp_code` is supplied, returns `403 MFA code required`
+  - if `mfa_enabled` is true and an `otp_code` is supplied, returns `403 MFA verification is not configured`
+  - updates user and admin login timestamps
+  - returns admin access and refresh tokens
+- `POST /api/v1/admin/auth/magic-link/start`
+  - looks up the user by email
+  - creates the user if missing
+  - creates an admin account if missing
+  - sends an admin magic link when the user and admin account are active
+- `POST /api/v1/admin/auth/magic-link/consume`
+  - validates the magic link
+  - creates the user if missing
+  - creates an admin account if missing
+  - updates login timestamps
+  - returns admin access and refresh tokens
+- `POST /api/v1/admin/auth/refresh`
+  - rotates the admin refresh token
+  - returns a new admin refresh token and access token
+- `POST /api/v1/admin/auth/logout`
+  - revokes the presented admin refresh token
+
+Admin route protection is implemented in `app/domains/admin/dependencies.py`:
+
+- admin routes accept `Authorization: Bearer <admin_access_token>`
+- admin routes also accept the `saas_admin_access_token` cookie as a bearer token source
+- local development fallback accepts `X-Admin-Key` only when `DEV_ADMIN_AUTH_ENABLED=true` in a local-style environment and `ADMIN_API_KEY` matches
+
+Bootstrap command:
 
 ```bash
-ACCESS_TOKEN=$(curl -s http://127.0.0.1:8000/api/v1/auth/login \
-  -H "Host: app.local" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"owner@team1.local","password":"StrongPass123"}' | python -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
-
-curl -i http://127.0.0.1:8000/api/v1/me \
-  -H "Host: team1.app.local" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}"
-
-curl -i http://127.0.0.1:8000/api/v1/usage \
-  -H "Host: team1.app.local" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}"
-
-curl -i -X POST http://127.0.0.1:8000/api/v1/memberships/invite \
-  -H "Host: team1.app.local" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"email":"seat4@team1.local","full_name":"Seat Four","role":"member"}'
+python -m app.domains.admin_auth.bootstrap --email admin@example.com
 ```
+
+The bootstrap module can also create or update a superadmin account:
+
+```bash
+python -m app.domains.admin_auth.bootstrap \
+  --email admin@example.com \
+  --role superadmin \
+  --full-name "Super Admin" \
+  --password "StrongPass123"
+```
+
+## Tenant Routes
+
+Implemented tenant routes:
+
+- `GET /api/v1/tenant`
+  - returns the resolved tenant
+- `GET /api/v1/me`
+  - requires authenticated tenant membership
+  - returns the current user, tenant, and membership role
+- `GET /api/v1/organization`
+  - returns the organization for the current tenant
+- `GET /api/v1/memberships`
+  - requires authenticated tenant membership
+  - returns memberships for the current tenant
+- `POST /api/v1/memberships/invite`
+  - requires owner or admin membership
+  - creates the user if missing
+  - rejects duplicate memberships
+  - enforces the `member_seats` usage limit before creating the membership
+- `GET /api/v1/usage`
+  - requires authenticated tenant membership
+  - returns plan, counters, limits, remaining values, and per-metric summaries
+- `GET /api/v1/billing/subscription`
+  - requires authenticated tenant membership
+  - ensures a subscription record exists and returns it
+- `POST /api/v1/billing/checkout-session`
+  - requires owner membership
+  - creates a Stripe checkout session for a billable plan
+
+Usage tracking hooks:
+
+- `GET /api/v1/me`
+- `GET /api/v1/memberships`
+- `GET /api/v1/billing/subscription`
+
+These routes call `track_api_request_usage` and increment the `api_requests` metric.
+
+## Billing and Stripe
+
+Billing logic is implemented in `app/domains/subscriptions`.
+
+- Stripe client configuration uses:
+  - `STRIPE_SECRET_KEY`
+  - `STRIPE_WEBHOOK_SECRET`
+  - `STRIPE_PRICE_ID_PRO`
+  - `STRIPE_PRICE_ID_ENTERPRISE`
+- `POST /api/v1/billing/checkout-session`
+  - rejects non-billable plans with `400 Plan is not billable`
+  - builds success and cancel URLs from the incoming request host and scheme
+  - returns the Stripe Checkout URL
+- `POST /api/v1/webhooks/stripe`
+  - requires the `Stripe-Signature` header
+  - validates the webhook signature
+  - records webhook event ids in the billing event ledger
+  - ignores duplicate webhook events
+  - applies:
+    - `checkout.session.completed`
+    - `customer.subscription.created`
+    - `customer.subscription.updated`
+    - `customer.subscription.deleted`
 
 ## Background Jobs
 
-Background jobs run through Celery with Redis as broker and result backend.
+Celery is configured in `worker/celery_app.py` with Redis as both broker and result backend.
 
-Currently processed asynchronously:
+Defined tasks in `worker/tasks.py`:
 
-- Usage limit warning evaluation for `api_requests` and `member_seats`
-- Subscription expiry warning scans
+- `worker.check_usage_limit_warning`
+  - creates a usage warning notification for a tenant/metric pair
+- `worker.scan_subscription_expiry_warnings`
+  - creates subscription expiry notifications for tenants approaching expiry
+
+Deferred task dispatch is implemented in `worker/dispatch.py` and connected in `app/db/session.py`:
+
+- tasks can be queued into `session.info["deferred_tasks"]`
+- after a successful SQLAlchemy session commit, `dispatch_deferred_tasks` sends them to Celery
+- after rollback, deferred tasks are discarded
+
+## Scheduler
+
+Celery beat scheduling is configured in `worker/celery_app.py`.
+
+Scheduled job:
+
+- `scan-subscription-expiry-warnings`
+  - task name: `worker.scan_subscription_expiry_warnings`
+  - interval: `max(SCHEDULER_SUBSCRIPTION_EXPIRY_SCAN_MINUTES, 1) * 60` seconds
+
+## Mail
+
+Mail verification CLI:
+
+```bash
+python -m app.domains.mail.verify
+python -m app.domains.mail.verify --send-test --to you@example.com
+```
+
+The command verifies SMTP connectivity and can send a test message.
 
 ## Running the Worker
 
@@ -269,7 +513,7 @@ Local:
 celery -A worker.main:celery_app worker --loglevel=INFO --concurrency=2
 ```
 
-Systemd:
+Systemd template:
 
 - `deployment/systemd/saas_worker.service`
 
@@ -281,107 +525,68 @@ Local:
 celery -A worker.scheduler:celery_app beat --loglevel=INFO
 ```
 
-Systemd:
+Systemd template:
 
 - `deployment/systemd/saas_scheduler.service`
 
-## Admin Metrics
+## Admin Routes
 
-Admin routes are separated under `/api/v1/admin` and do not use tenant context.
+Admin routes are implemented in `app/domains/admin/router.py`.
 
-## Admin Authentication
+- `GET /api/v1/admin`
+  - returns the admin namespace, role, and listed capabilities
+- `GET /api/v1/admin/metrics/overview`
+- `GET /api/v1/admin/metrics/revenue`
+- `GET /api/v1/admin/metrics/recent-tenants`
 
-Admin authentication is separate from tenant user authentication.
+These routes require admin access. Metrics routes also record admin audit log entries.
 
-- `POST /api/v1/admin/auth/login` validates a user password and an attached `admin_accounts` entitlement
-- `POST /api/v1/admin/auth/refresh` rotates the admin refresh token and returns a new admin access token
-- `POST /api/v1/admin/auth/logout` revokes the presented admin refresh session
-- Admin roles are split into `superadmin` and `admin`
-- `admin` is intended for read-only dashboard access
-- `superadmin` is reserved for elevated platform control
-- Admin access tokens must be sent with `Authorization: Bearer <admin_access_token>`
-- Admin refresh sessions are stored server-side only as token hashes in `admin_auth_sessions`
-- Admin routes under `/api/v1/admin` require an admin bearer token and do not accept tenant membership as a substitute
+## Security
 
-Bootstrap an admin account after creating a normal user:
+`app/main.py` sets these response headers on all requests:
 
-```bash
-python -m app.domains.admin_auth.bootstrap --email admin@example.com
-```
+- `X-Frame-Options: SAMEORIGIN`
+- `X-Content-Type-Options: nosniff`
+- `X-Permitted-Cross-Domain-Policies: none`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Content-Security-Policy`
+- `Permissions-Policy`
+- `Cross-Origin-Opener-Policy: same-origin`
 
-Bootstrap or update the superadmin account explicitly:
+`app/main.py` also blocks requests to sensitive path patterns and returns `404` for matched paths.
 
-```bash
-python -m app.domains.admin_auth.bootstrap \
-  --email gim@glitter.kr \
-  --role superadmin \
-  --full-name "Super Admin" \
-  --password 'yaho0n/t'
-```
-
-The password is stored using the existing password hash flow, not in plaintext.
-
-Local-only fallback admin header:
-
-- `X-Admin-Key` is accepted only when `APP_ENV` is local-style and `DEV_ADMIN_AUTH_ENABLED=true`
-- `ADMIN_API_KEY` is required only for that local fallback path
-- Production deployments must use Bearer admin authentication only
-
-Temporary admin authentication for local verification:
-
-- Configure `ADMIN_API_KEY`
-- Send `X-Admin-Key` with each admin request
-- Missing `X-Admin-Key` returns `401`
-- Invalid admin key returns `403`
-- Non-local environments reject development admin auth entirely
-
-Plan pricing for admin revenue is a local estimation layer, not Stripe invoice reconciliation:
-
-- `free`: `0`
-- `pro`: `2900`
-- `enterprise`: `9900`
-
-Example admin verification:
+Secret scanning command:
 
 ```bash
-curl -i http://127.0.0.1:8000/api/v1/admin/metrics/overview \
-  -H "X-Admin-Key: local-admin-key"
-
-curl -i http://127.0.0.1:8000/api/v1/admin/metrics/revenue \
-  -H "X-Admin-Key: local-admin-key"
-
-curl -i http://127.0.0.1:8000/api/v1/admin/metrics/recent-tenants \
-  -H "X-Admin-Key: local-admin-key"
+gitleaks detect --config .gitleaks.toml --source .
 ```
 
-## API
-
-- `GET /healthz` returns service and database health
-- `POST /api/v1/auth/register` creates a user account with a password
-- `POST /api/v1/auth/login` validates email and password credentials and returns JWT tokens
-- `POST /api/v1/auth/refresh` returns a new access token for a valid refresh token
-- `POST /api/v1/auth/logout` acknowledges logout without token revocation
-- `GET /api/v1/tenant` returns the resolved tenant for tenant-scoped traffic
-- `GET /api/v1/me` returns the current user, tenant, and membership role
-- `GET /api/v1/organization` returns the current tenant organization
-- `GET /api/v1/memberships` returns memberships for the current tenant
-- `POST /api/v1/memberships/invite` creates a tenant membership for a user
-- `POST /api/v1/billing/checkout-session` creates a Stripe checkout session for the current tenant
-- `GET /api/v1/billing/subscription` returns the current tenant subscription
-- `POST /api/v1/webhooks/stripe` handles Stripe webhook synchronization
-- `GET /api/v1/usage` returns current usage counters and plan limits
-- `GET /api/v1/auth/session`
-- `GET /api/v1/admin/metrics/overview` returns platform-wide admin metrics
-- `GET /api/v1/admin/metrics/revenue` returns locally estimated recurring revenue
-- `GET /api/v1/admin/metrics/recent-tenants` returns recent tenant records
+`.gitignore` excludes `.env` and `.env.*` except `.env.example`.
 
 ## Deployment
 
-- `deployment/nginx/app.conf` provides reverse proxy configuration for wildcard subdomains
-- `deployment/systemd/saas_api.service` provides a systemd unit for running the FastAPI app with Uvicorn
-- `deployment/systemd/saas_worker.service` provides a systemd unit for the Celery worker
-- `deployment/systemd/saas_scheduler.service` provides a systemd unit for the Celery scheduler
+Nginx template:
+
+- `deployment/nginx/app.conf`
+  - proxies `core.glitter.kr` and `*.core.glitter.kr` to `127.0.0.1:8000`
+  - forwards `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-For`, and `X-Real-IP`
+
+Systemd templates:
+
+- `deployment/systemd/saas_api.service`
+  - runs `uvicorn app.main:app --host 127.0.0.1 --port 8000`
+  - uses working directory `/srv/multi_tenant_saas_subscription_platform`
+  - loads environment from `/srv/multi_tenant_saas_subscription_platform/.env`
+- `deployment/systemd/saas_worker.service`
+  - runs `celery -A worker.main:celery_app worker --loglevel=INFO --concurrency=2`
+- `deployment/systemd/saas_scheduler.service`
+  - runs `celery -A worker.scheduler:celery_app beat --loglevel=INFO`
 
 ## Alembic
 
-Alembic is initialized and includes migrations for `tenants`, `users`, `organizations`, `memberships`, `plans`, `subscriptions`, `usage_events`, `usage_counters`, and `notifications`.
+Alembic is configured with:
+
+- `script_location = alembic`
+- `sqlalchemy.url = %(DATABASE_URL)s`
+
+The migration environment imports model metadata from `app.db.base.Base` and `app.db.models`.

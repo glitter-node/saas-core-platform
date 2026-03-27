@@ -1,6 +1,7 @@
 [Unit]
 Description=multi_tenant_saas_subscription_platform Scheduler
-After=network.target redis.service
+After=network.target redis-server.service mariadb.service
+Wants=redis-server.service mariadb.service
 
 [Service]
 Type=simple
@@ -8,9 +9,11 @@ User=www-data
 Group=www-data
 WorkingDirectory=/srv/multi_tenant_saas_subscription_platform
 EnvironmentFile=/srv/multi_tenant_saas_subscription_platform/.env
-ExecStart=/srv/multi_tenant_saas_subscription_platform/.venv/bin/celery -A worker.scheduler:celery_app beat --loglevel=INFO
+ExecStart=/srv/multi_tenant_saas_subscription_platform/.venv/bin/python /srv/multi_tenant_saas_subscription_platform/scripts/service_runner.py /var/log/multi_tenant_saas_subscription_platform/scheduler.log -- /srv/multi_tenant_saas_subscription_platform/scripts/run_scheduler.sh
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

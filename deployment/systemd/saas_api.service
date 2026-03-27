@@ -1,6 +1,7 @@
 [Unit]
 Description=multi_tenant_saas_subscription_platform API
-After=network.target
+After=network.target mariadb.service redis-server.service
+Wants=mariadb.service redis-server.service
 
 [Service]
 Type=simple
@@ -8,9 +9,11 @@ User=www-data
 Group=www-data
 WorkingDirectory=/srv/multi_tenant_saas_subscription_platform
 EnvironmentFile=/srv/multi_tenant_saas_subscription_platform/.env
-ExecStart=/srv/multi_tenant_saas_subscription_platform/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=/srv/multi_tenant_saas_subscription_platform/.venv/bin/python /srv/multi_tenant_saas_subscription_platform/scripts/service_runner.py /var/log/multi_tenant_saas_subscription_platform/api.log -- /srv/multi_tenant_saas_subscription_platform/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
