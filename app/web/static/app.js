@@ -18,6 +18,44 @@ function writeJson(id, value) {
   }
 }
 
+function renderAdminWorkspaces(workspaces) {
+  const list = byId("admin-workspaces-list");
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+  if (!Array.isArray(workspaces) || workspaces.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "status-line";
+    empty.textContent = "No workspaces available.";
+    list.appendChild(empty);
+    return;
+  }
+  workspaces.forEach((workspace) => {
+    const row = document.createElement("div");
+    row.className = "workspace-admin-row";
+
+    const meta = document.createElement("div");
+    meta.className = "workspace-admin-meta";
+    meta.innerHTML = `<strong>${workspace.name}</strong><span>${workspace.subdomain}.${config.appDomain}</span>`;
+
+    const form = document.createElement("form");
+    form.className = "workspace-admin-form";
+    form.method = "post";
+    form.action = `/admin/workspaces/${workspace.id}/delete`;
+
+    const button = document.createElement("button");
+    button.type = "submit";
+    button.className = "button button-ghost";
+    button.textContent = "Delete Workspace";
+
+    form.appendChild(button);
+    row.appendChild(meta);
+    row.appendChild(form);
+    list.appendChild(row);
+  });
+}
+
 function currentPage() {
   return document.body.dataset.page || "";
 }
@@ -347,11 +385,17 @@ async function loadAdminDashboard() {
     ]);
     writeJson("admin-overview-output", overview);
     writeJson("admin-revenue-output", revenue);
-    writeJson("admin-tenants-output", tenants);
+    renderAdminWorkspaces(tenants);
     const params = new URLSearchParams(window.location.search);
     const workspaceCreated = params.get("workspace_created");
     const workspaceName = params.get("workspace_name");
-    if (workspaceCreated && workspaceName) {
+    const workspaceDeleted = params.get("workspace_deleted");
+    const workspaceDeleteError = params.get("workspace_delete_error");
+    if (workspaceDeleteError) {
+      setText("admin-dashboard-status", workspaceDeleteError);
+    } else if (workspaceDeleted) {
+      setText("admin-dashboard-status", `Workspace ${workspaceDeleted} deleted.`);
+    } else if (workspaceCreated && workspaceName) {
       setText("admin-dashboard-status", `Workspace ${workspaceName} created at ${workspaceCreated}.${config.appDomain}`);
     } else {
       setText("admin-dashboard-status", `Admin host: ${window.location.hostname}`);

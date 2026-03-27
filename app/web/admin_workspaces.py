@@ -12,6 +12,7 @@ from app.domains.admin_audit.service import record_admin_audit_log
 from app.domains.admin.dependencies import require_admin_access
 from app.domains.admin_auth.models import AdminAccount
 from app.domains.admin_workspaces.service import create_workspace_as_admin
+from app.domains.admin_workspaces.service import delete_workspace_as_admin
 
 router = APIRouter(tags=["web-admin-workspaces"])
 
@@ -76,4 +77,20 @@ async def create_workspace_route(
             "workspace_name": workspace.name,
         }
     )
+    return RedirectResponse(url=f"/admin/dashboard?{query}", status_code=303)
+
+
+@router.post("/admin/workspaces/{workspace_id}/delete", include_in_schema=False, response_model=None)
+def delete_workspace_route(
+    workspace_id: int,
+    request: Request,
+    admin: AdminAccount = Depends(require_admin_access),
+    session: Session = Depends(get_db_session),
+) -> RedirectResponse:
+    try:
+        workspace = delete_workspace_as_admin(session, admin, workspace_id, request)
+        query = urlencode({"workspace_deleted": workspace.slug})
+    except Exception as exc:
+        detail = getattr(exc, "detail", "Workspace deletion failed")
+        query = urlencode({"workspace_delete_error": str(detail)})
     return RedirectResponse(url=f"/admin/dashboard?{query}", status_code=303)

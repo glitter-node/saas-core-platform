@@ -16,11 +16,11 @@ PLAN_PRICING = {
 
 
 def build_total_tenants_query() -> Select[tuple[int]]:
-    return select(func.count(Tenant.id))
+    return select(func.count(Tenant.id)).where(Tenant.deleted_at.is_(None))
 
 
 def build_active_tenants_query() -> Select[tuple[int]]:
-    return select(func.count(Tenant.id)).where(Tenant.status == "active")
+    return select(func.count(Tenant.id)).where(Tenant.status == "active", Tenant.deleted_at.is_(None))
 
 
 def build_total_users_query() -> Select[tuple[int]]:
@@ -50,7 +50,7 @@ def build_notifications_count_query() -> Select[tuple[int]]:
 
 
 def build_recent_tenants_query(limit: int) -> Select[tuple[Tenant]]:
-    return select(Tenant).order_by(Tenant.created_at.desc(), Tenant.id.desc()).limit(limit)
+    return select(Tenant).where(Tenant.deleted_at.is_(None)).order_by(Tenant.created_at.desc(), Tenant.id.desc()).limit(limit)
 
 
 def build_active_paid_subscriptions_query() -> Select[tuple[str, int]]:

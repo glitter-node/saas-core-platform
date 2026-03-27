@@ -20,6 +20,7 @@ class Tenant(Base):
     slug: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
     subdomain: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

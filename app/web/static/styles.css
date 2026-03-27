@@ -257,6 +257,42 @@ input:focus {
   margin-right: 8px;
 }
 
+.workspace-admin-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.workspace-admin-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+
+.workspace-admin-meta {
+  min-width: 0;
+}
+
+.workspace-admin-meta strong {
+  display: block;
+}
+
+.workspace-admin-meta span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.workspace-admin-form {
+  display: inline-flex;
+}
+
 .metric-card {
   min-height: 260px;
 }
@@ -291,5 +327,10 @@ input:focus {
 
   .dashboard-header {
     flex-direction: column;
+  }
+
+  .workspace-admin-row {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

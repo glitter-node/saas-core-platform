@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 import re
 from collections.abc import Mapping
 
@@ -26,6 +27,14 @@ def slugify_workspace_name(name: str) -> str:
 
 def build_workspace_slug_query(candidate: str) -> Select[tuple[Tenant]]:
     return select(Tenant).where(or_(Tenant.slug == candidate, Tenant.subdomain == candidate))
+
+
+def build_workspace_by_id_query(workspace_id: int) -> Select[tuple[Tenant]]:
+    return select(Tenant).where(Tenant.id == workspace_id)
+
+
+def get_workspace_by_id(session: Session, workspace_id: int) -> Tenant | None:
+    return session.execute(build_workspace_by_id_query(workspace_id)).scalar_one_or_none()
 
 
 def workspace_slug_exists(session: Session, candidate: str) -> bool:
@@ -202,3 +211,103 @@ def create_workspace_as_admin(
         )
         session.commit()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Workspace creation failed") from exc
+
+
+def delete_workspace_as_admin(
+    session: Session,
+    admin_account: AdminAccount,
+    workspace_id: int,
+    request: Request | None = None,
+) -> Tenant:
+    ensure_admin_can_create_workspace(admin_account)
+    workspace = get_workspace_by_id(session, workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+    if workspace.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Workspace is already deleted")
+
+    record_admin_audit_log(
+        session,
+        action="workspace_deletion_started",
+        status="started",
+        request=request,
+        admin_account_id=admin_account.id,
+        target_type="workspace",
+        target_id=str(workspace.id),
+        detail=build_workspace_creation_detail(
+            actor_user_id=admin_account.user_id,
+            workspace_name=workspace.name,
+            workspace_id=workspace.id,
+            workspace_slug=workspace.slug,
+        ),
+    )
+    session.commit()
+
+    try:
+        with session.begin():
+            locked_workspace = get_workspace_by_id(session, workspace_id)
+            if locked_workspace is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+            if locked_workspace.deleted_at is not None:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Workspace is already deleted")
+
+            locked_workspace.deleted_at = datetime.now(UTC)
+            session.add(locked_workspace)
+
+            record_admin_audit_log(
+                session,
+                action="workspace_deleted",
+                status="succeeded",
+                request=request,
+                admin_account_id=admin_account.id,
+                target_type="workspace",
+                target_id=str(locked_workspace.id),
+                detail=build_workspace_creation_detail(
+                    actor_user_id=admin_account.user_id,
+                    workspace_name=locked_workspace.name,
+                    workspace_id=locked_workspace.id,
+                    workspace_slug=locked_workspace.slug,
+                ),
+            )
+        session.refresh(locked_workspace)
+        return locked_workspace
+    except HTTPException as exc:
+        session.rollback()
+        record_admin_audit_log(
+            session,
+            action="workspace_deletion_failed",
+            status="failed",
+            request=request,
+            admin_account_id=admin_account.id,
+            target_type="workspace",
+            target_id=str(workspace_id),
+            detail=build_workspace_creation_detail(
+                actor_user_id=admin_account.user_id,
+                workspace_name=workspace.name,
+                workspace_id=workspace.id,
+                workspace_slug=workspace.slug,
+                reason=str(exc.detail),
+            ),
+        )
+        session.commit()
+        raise
+    except Exception as exc:
+        session.rollback()
+        record_admin_audit_log(
+            session,
+            action="workspace_deletion_failed",
+            status="failed",
+            request=request,
+            admin_account_id=admin_account.id,
+            target_type="workspace",
+            target_id=str(workspace_id),
+            detail=build_workspace_creation_detail(
+                actor_user_id=admin_account.user_id,
+                workspace_name=workspace.name,
+                workspace_id=workspace.id,
+                workspace_slug=workspace.slug,
+                reason="database_failure",
+            ),
+        )
+        session.commit()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Workspace deletion failed") from exc

@@ -5,7 +5,7 @@ from app.domains.tenants.models import Tenant
 
 
 def build_active_tenant_query(subdomain: str) -> Select[tuple[Tenant]]:
-    return select(Tenant).where(Tenant.subdomain == subdomain, Tenant.status == "active")
+    return select(Tenant).where(Tenant.subdomain == subdomain, Tenant.status == "active", Tenant.deleted_at.is_(None))
 
 
 def get_active_tenant_by_subdomain(session: Session, subdomain: str) -> Tenant | None:
@@ -13,7 +13,7 @@ def get_active_tenant_by_subdomain(session: Session, subdomain: str) -> Tenant |
 
 
 def build_active_tenants_query(limit: int | None = None) -> Select[tuple[Tenant]]:
-    query = select(Tenant).where(Tenant.status == "active").order_by(Tenant.created_at.desc(), Tenant.id.desc())
+    query = select(Tenant).where(Tenant.status == "active", Tenant.deleted_at.is_(None)).order_by(Tenant.created_at.desc(), Tenant.id.desc())
     if limit is not None:
         query = query.limit(limit)
     return query
